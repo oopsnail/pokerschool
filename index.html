@@ -154,6 +154,20 @@ h1,h2,strong,.btn,.opt{font-family:var(--disp);font-weight:400}
   border:2px solid var(--edge);background:var(--bg-2);font-family:var(--disp);font-size:15px}
 .act.hot{border-color:var(--amber);color:var(--amber)}
 .waiting{color:var(--mute);font-size:13.5px;padding:12px 2px}
+.seat.mini{padding:10px 12px;margin-bottom:8px}
+.seat.mini .seat-line{margin-bottom:8px}
+.seat.mini .seat-line strong{font-size:14px}
+.seat.mini .chips{font-size:14px}
+.seat.out{opacity:.45}
+.seat.won{border-color:var(--go)}
+.folded{font-size:12.5px;color:var(--mute);padding:14px 0;display:inline-block}
+.tmsg{white-space:pre-line}
+.setup{padding-top:28px}
+.seatpick{display:flex;flex-direction:column;gap:10px}
+.seatbtn{display:block;width:100%;text-align:left;background:var(--bg-2);
+  border:1.5px solid var(--edge);border-radius:14px;padding:15px 16px}
+.seatbtn b{display:block;font-family:var(--disp);font-size:19px;color:#FFF;font-weight:400;margin-bottom:3px}
+.seatbtn small{font-size:12.5px;color:var(--mute);line-height:1.55}
 .opts.two{grid-template-columns:1fr 1fr}
 .opts.two .opt{padding:18px 8px;font-size:17px}
 .node button{width:100%;display:flex;align-items:center;gap:13px;text-align:left;
@@ -889,133 +903,201 @@ function genFlopCall(){
 }
 
 
-/* ═══════════  실전 대결 · 1대1 홀덤  ═══════════ */
+/* ═══════════  실전 대결 · 2~4인 홀덤  ═══════════ */
 
 var G = null;
+var SEAT_NAMES = ["나", "상대 A", "상대 B", "상대 C"];
 
 function money(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
-function other(w){ return w==="me" ? "ai" : "me"; }
-function potTotal(){ return G.contrib.me + G.contrib.ai; }
-function toCall(w){ return Math.max(0, G.bet[other(w)] - G.bet[w]); }
-function isAllIn(w){ return G.stack[w] === 0; }
-function pushLog(t){ G.log.push(t); if(G.log.length > 4) G.log.shift(); }
+function pushLog(t){ G.log.push(t); if(G.log.length > 5) G.log.shift(); }
+function live(){ return G.P.filter(function(p){ return !p.folded; }); }
+function actable(){ return G.P.filter(function(p){ return !p.folded && p.stack > 0; }); }
+function potTotal(){ var t=0; G.P.forEach(function(p){ t += p.contrib; }); return t; }
+function maxBet(){ var m=0; G.P.forEach(function(p){ if(p.bet>m) m=p.bet; }); return m; }
+function toCall(i){ return Math.max(0, maxBet() - G.P[i].bet); }
+function nextSeat(i){ return (i+1) % G.n; }
 
-function newGame(){
-  G = { sb:10, bb:20, stack:{me:1000, ai:1000}, handNo:0, log:[], phase:"idle" };
+function newGame(n){
+  G = { n:n, sb:10, bb:20, handNo:0, log:[], phase:"idle", P:[] };
+  for(var i=0;i<n;i++){
+    G.P.push({ i:i, name:SEAT_NAMES[i], me:(i===0), stack:1000,
+               hole:[], contrib:0, bet:0, folded:false, acted:false, best:null });
+  }
+  G.button = n - 1;          /* 첫 판에 버튼이 나에게 오도록 */
   newHand();
 }
 
 function newHand(){
-  if(G.stack.me <= 0 || G.stack.ai <= 0){ G.phase = "gameover"; return; }
+  if(G.P.filter(function(p){ return p.stack > 0; }).length < 2){ G.phase = "gameover"; return; }
   G.handNo++;
-  G.button = (G.handNo % 2 === 1) ? "me" : "ai";
+  /* 칩이 남은 사람에게만 버튼을 넘긴다 */
+  do { G.button = nextSeat(G.button); } while(G.P[G.button].stack <= 0);
+
   var dk = shuffle(deck());
-  G.hole = { me:[dk[0],dk[1]], ai:[dk[2],dk[3]] };
-  G.rest = dk.slice(4);
+  G.P.forEach(function(p, k){
+    p.hole = (p.stack > 0) ? [dk[k*2], dk[k*2+1]] : [];
+    p.contrib = 0; p.bet = 0; p.acted = false; p.best = null;
+    p.folded = (p.stack <= 0);
+  });
+  G.rest = dk.slice(G.n * 2);
   G.board = [];
-  G.contrib = { me:0, ai:0 };
-  G.bet = { me:0, ai:0 };
-  G.acted = { me:false, ai:false };
   G.street = 0;
   G.phase = "acting";
   G.reveal = false;
   G.msg = "";
+  G.pots = null;
   G.log = [];
-  put(G.button, G.sb);
-  put(other(G.button), G.bb);
-  pushLog("이번 판 버튼은 "+(G.button==="me" ? "나" : "상대")+
-    ". 버튼이 스몰 "+G.sb+", 반대쪽이 빅 "+G.bb+" 를 깔았습니다.");
-  pushLog(G.button==="me"
-    ? "프리플랍은 버튼이 먼저 — 내가 먼저 정합니다."
-    : "프리플랍은 버튼이 먼저 — 상대가 먼저 정합니다.");
-  G.turn = G.button;              /* 프리플랍은 딜러가 먼저 */
+
+  var sb, bb;
+  if(G.n === 2){ sb = G.button; bb = nextSeat(G.button); }
+  else { sb = liveSeatAfter(G.button); bb = liveSeatAfter(sb); }
+  put(sb, G.sb); put(bb, G.bb);
+  G.bbSeat = bb;
+
+  pushLog("버튼은 "+G.P[G.button].name+". "+G.P[sb].name+" 스몰 "+G.sb+", "+G.P[bb].name+" 빅 "+G.bb+".");
+  G.turn = liveSeatAfter(bb);      /* 프리플랍은 빅 블라인드 다음부터 */
+  pushLog("프리플랍 — "+G.P[G.turn].name+"부터 정합니다.");
   step();
 }
 
-function put(w, amt){
-  amt = Math.max(0, Math.min(amt, G.stack[w]));
-  G.stack[w] -= amt; G.bet[w] += amt; G.contrib[w] += amt;
+/* 칩이 남아 있는 다음 자리 */
+function liveSeatAfter(i){
+  var k = nextSeat(i), guard = 0;
+  while(G.P[k].folded && guard++ < G.n) k = nextSeat(k);
+  return k;
+}
+
+function put(i, amt){
+  var p = G.P[i];
+  amt = Math.max(0, Math.min(amt, p.stack));
+  p.stack -= amt; p.bet += amt; p.contrib += amt;
   return amt;
 }
 
-/* 다음 행동할 사람을 찾아 진행. 사람 차례가 오면 멈춘다 */
-function anyAllIn(){ return isAllIn("me") || isAllIn("ai"); }
+/* 한 라운드가 끝났는지 */
+function roundDone(){
+  var L = live();
+  if(L.length <= 1) return true;
+  var A = actable();
+  if(A.length === 0) return true;
+  var m = maxBet();
+  for(var k=0;k<A.length;k++){
+    if(!A[k].acted || A[k].bet !== m) return false;
+  }
+  return true;
+}
 
 function step(){
   var guard = 0;
-  while(G.phase === "acting" && guard++ < 80){
-    /* 둘 다 한 번씩 행동했고 액수가 같거나, 누군가 올인이면 그 라운드는 끝 */
-    if(G.acted.me && G.acted.ai && (G.bet.me === G.bet.ai || anyAllIn())){ nextStreet(); continue; }
-    var w = G.turn;
-    if(isAllIn(w)){ G.acted[w] = true; G.turn = other(w); continue; }
-    if(w === "ai"){ aiAct(); continue; }
-    return;
+  while(G.phase === "acting" && guard++ < 400){
+    if(live().length <= 1){ endByFold(); return; }
+    if(roundDone()){ nextStreet(); continue; }
+    var p = G.P[G.turn];
+    if(p.folded || p.stack === 0){ p.acted = true; G.turn = nextSeat(G.turn); continue; }
+    if(!p.me){ aiAct(G.turn); G.turn = nextSeat(G.turn); continue; }
+    return;                    /* 사람 차례 */
   }
-  /* 혹시라도 빠져나오지 못하면 판을 정리한다 */
   if(G.phase === "acting") runOut();
 }
 
+/* 아무도 받아주지 않은 초과분은 돌려준다 */
+function returnUncalled(){
+  var bets = G.P.map(function(p){ return p.bet; }).slice().sort(function(a,b){ return b-a; });
+  if(bets.length < 2 || bets[0] <= bets[1]) return;
+  var diff = bets[0] - bets[1];
+  for(var k=0;k<G.n;k++){
+    if(G.P[k].bet === bets[0]){
+      G.P[k].stack += diff; G.P[k].bet -= diff; G.P[k].contrib -= diff;
+      pushLog("아무도 받지 않은 "+money(diff)+" 은 "+G.P[k].name+"에게 돌아갑니다.");
+      break;
+    }
+  }
+}
+
 function nextStreet(){
-  G.bet = { me:0, ai:0 };
-  if(isAllIn("me") || isAllIn("ai")){ runOut(); return; }
+  returnUncalled();
+  G.P.forEach(function(p){ p.bet = 0; });
+  if(live().length <= 1){ endByFold(); return; }
+  if(actable().length <= 1){ runOut(); return; }
   if(G.street >= 3){ showdown(); return; }
   G.street++;
-  var n = (G.street === 1) ? 3 : 1;
-  for(var i=0;i<n;i++) G.board.push(G.rest.shift());
-  G.acted = { me:false, ai:false };
-  G.turn = other(G.button);       /* 플랍부터는 딜러가 나중 */
+  var cnt = (G.street === 1) ? 3 : 1;
+  for(var i=0;i<cnt;i++) G.board.push(G.rest.shift());
+  G.P.forEach(function(p){ p.acted = false; });
+  G.turn = liveSeatAfter(G.button);   /* 플랍부터는 버튼 다음부터 */
   pushLog(STREET_NAMES[G.street]+" — "+G.board.map(txt).join(" "));
 }
 
 function runOut(){
+  returnUncalled();
+  G.P.forEach(function(p){ p.bet = 0; });
+  if(G.board.length < 5) pushLog("더 걸 사람이 없어 남은 카드를 모두 엽니다.");
   while(G.board.length < 5) G.board.push(G.rest.shift());
-  pushLog("둘 중 하나가 올인이라 남은 카드를 모두 엽니다.");
   showdown();
 }
 
-function settleExcess(){
-  var main = 2 * Math.min(G.contrib.me, G.contrib.ai);
-  var back = potTotal() - main;
-  if(back > 0){
-    if(G.contrib.me > G.contrib.ai) G.stack.me += back; else G.stack.ai += back;
-  }
-  return main;
+/* 메인 팟과 사이드 팟을 층층이 쌓는다 */
+function buildPots(){
+  var levels = [], seen = {};
+  G.P.forEach(function(p){ if(p.contrib > 0 && !seen[p.contrib]){ seen[p.contrib]=1; levels.push(p.contrib); } });
+  levels.sort(function(a,b){ return a-b; });
+  var pots = [], prev = 0;
+  levels.forEach(function(lv){
+    var amount = 0, elig = [];
+    G.P.forEach(function(p){
+      amount += Math.min(p.contrib, lv) - Math.min(p.contrib, prev);
+      if(p.contrib >= lv && !p.folded) elig.push(p.i);
+    });
+    if(amount > 0) pots.push({ amount:amount, elig:elig });
+    prev = lv;
+  });
+  return pots;
 }
 
 function showdown(){
   G.reveal = true;
-  var mine = bestOfSeven(G.hole.me.concat(G.board));
-  var yours = bestOfSeven(G.hole.ai.concat(G.board));
-  var c = cmp(mine, yours);
-  var main = settleExcess();
-  var line = "내 손 "+nameOf(mine)+" · 상대 "+nameOf(yours)+". ";
-  if(c > 0){ G.stack.me += main; G.msg = line+"내가 "+money(main)+" 을 가져갑니다."; G.win = "me"; }
-  else if(c < 0){ G.stack.ai += main; G.msg = line+"상대가 "+money(main)+" 을 가져갑니다."; G.win = "ai"; }
-  else {
-    var half = Math.floor(main/2);
-    G.stack.me += half; G.stack.ai += main - half;
-    G.msg = line+"비겨서 나눠 갖습니다."; G.win = null;
+  var L = live();
+  L.forEach(function(p){ p.best = bestOfSeven(p.hole.concat(G.board)); });
+  var pots = buildPots();
+  G.pots = pots;
+  var lines = [];
+  G.winners = {};
+
+  pots.forEach(function(pot, idx){
+    var cands = pot.elig.map(function(i){ return G.P[i]; });
+    if(!cands.length) return;
+    var top = cands[0];
+    cands.forEach(function(p){ if(cmp(p.best, top.best) > 0) top = p; });
+    var ws = cands.filter(function(p){ return cmp(p.best, top.best) === 0; });
+    var share = Math.floor(pot.amount / ws.length);
+    var rest = pot.amount - share * ws.length;
+    ws.forEach(function(p, k){ p.stack += share + (k === 0 ? rest : 0); G.winners[p.i] = true; });
+    lines.push((pots.length > 1 ? (idx === 0 ? "메인 팟 " : "사이드 팟 ") : "")+
+      ws.map(function(p){ return p.name; }).join(" · ")+" → "+money(pot.amount)+
+      " ("+nameOf(ws[0].best)+")");
+  });
+
+  if(L.length > 1){
+    lines.push(L.map(function(p){ return p.name+" "+nameOf(p.best); }).join(" · "));
   }
-  G.best = { me:new Set(mine.map(cid)), ai:new Set(yours.map(cid)) };
+  G.msg = lines.join("\n");
   G.phase = "over";
 }
 
-function doFold(w){
-  var win = other(w);
-  G.stack[win] += potTotal();
-  G.msg = (w === "me")
-    ? "내가 폴드했습니다. 상대가 "+money(potTotal())+" 을 가져갑니다."
-    : "상대가 폴드했습니다. 내가 "+money(potTotal())+" 을 가져갑니다.";
-  G.win = win;
-  G.best = null;
+function endByFold(){
+  returnUncalled();
+  var w = live()[0];
+  var amt = potTotal();
+  w.stack += amt;
+  G.winners = {}; G.winners[w.i] = true;
+  G.msg = w.name+" 혼자 남아 "+money(amt)+" 을 가져갑니다.";
   G.phase = "over";
 }
 
-function raiseAmt(w){
-  var c = toCall(w);
+function raiseAmt(i){
+  var c = toCall(i);
   var add = Math.max(G.bb, Math.round((potTotal() + c) * 0.7 / 10) * 10);
-  var amt = (G.bet[other(w)] + add) - G.bet[w];
-  return Math.min(amt, G.stack[w]);
+  return Math.min((maxBet() + add) - G.P[i].bet, G.P[i].stack);
 }
 
 /* ── 상대의 판단 ── */
@@ -1028,76 +1110,72 @@ function preStrength(h){
   if(gap === 1) v += 0.05; else if(gap === 2) v += 0.02; else if(gap >= 5) v -= 0.05;
   return Math.max(0.05, Math.min(0.9, v));
 }
-function strength(w){
-  var h = G.hole[w];
+function rawStrength(i){
+  var p = G.P[i], h = p.hole;
   if(G.board.length === 0) return preStrength(h);
   var five = bestOfSeven(h.concat(G.board));
   var sc = score(five), g = sc[0];
   var base = [0.16,0.40,0.60,0.75,0.83,0.88,0.94,0.98,1,1][g];
   if(g >= 1 && !h.some(function(c){ return c.r === sc[1]; })) base -= 0.14;
-  var all = h.concat(G.board), cnt = {};
-  all.forEach(function(c){ cnt[c.s] = (cnt[c.s]||0)+1; });
+  var cnt = {}; h.concat(G.board).forEach(function(c){ cnt[c.s] = (cnt[c.s]||0)+1; });
   var fd = false, k;
   for(k in cnt) if(cnt[k] >= 4) fd = true;
   if(fd && g < 5 && G.board.length < 5) base += 0.10;
   return Math.max(0, Math.min(1, base));
 }
-function aiAct(){
-  var c = toCall("ai"), st = strength("ai"), r = Math.random(), a;
-  /* 상대(사람)가 이미 올인이면 더 올릴 수 없다 — 콜 아니면 폴드 */
-  if(isAllIn("me")){
-    if(c === 0){ G.acted.ai = true; pushLog("상대: 체크"); G.turn = "me"; return; }
-    var need0 = c / (potTotal() + c);
-    if(st > need0 + 0.05){
-      a = put("ai", c); G.acted.ai = true;
-      pushLog("상대: 콜 "+money(a)); G.turn = "me"; return;
-    }
-    pushLog("상대: 폴드"); doFold("ai"); return;
-  }
+/* 상대가 여럿이면 이길 확률이 그만큼 떨어진다 */
+function strength(i){
+  var opp = Math.max(1, live().length - 1);
+  return Math.pow(rawStrength(i), opp);
+}
+
+function aiAct(i){
+  var p = G.P[i], c = toCall(i), st = strength(i), r = Math.random(), a;
+  var noRaise = actable().length <= 1;   /* 나머지가 다 올인이면 올릴 수 없다 */
+
   if(c === 0){
-    if(st > 0.72 || (st > 0.50 && r < 0.5) || r < 0.10){
-      a = raiseAmt("ai"); put("ai", a);
-      G.acted.ai = true; G.acted.me = false;
-      pushLog("상대: "+(isAllIn("ai") ? "올인" : "벳")+" "+money(a));
+    if(!noRaise && (st > 0.62 || (st > 0.42 && r < 0.45) || r < 0.09)){
+      a = put(i, raiseAmt(i));
+      G.P.forEach(function(q){ if(q.i !== i) q.acted = false; });
+      p.acted = true;
+      pushLog(p.name+": "+(p.stack === 0 ? "올인" : "벳")+" "+money(a));
     } else {
-      G.acted.ai = true;
-      pushLog("상대: 체크");
+      p.acted = true;
+      pushLog(p.name+": 체크");
     }
-    G.turn = "me"; return;
+    return;
   }
   var need = c / (potTotal() + c);
-  if(st > 0.85 && r < 0.55 && G.stack.ai > c){
-    a = raiseAmt("ai"); put("ai", a);
-    G.acted.ai = true; G.acted.me = false;
-    pushLog("상대: "+(isAllIn("ai") ? "올인" : "레이즈")+" "+money(a));
-    G.turn = "me"; return;
+  if(!noRaise && st > 0.78 && r < 0.5 && p.stack > c){
+    a = put(i, raiseAmt(i));
+    G.P.forEach(function(q){ if(q.i !== i) q.acted = false; });
+    p.acted = true;
+    pushLog(p.name+": "+(p.stack === 0 ? "올인" : "레이즈")+" "+money(a));
+    return;
   }
-  if(st > need + 0.10 || r < 0.07){
-    a = put("ai", c);
-    G.acted.ai = true;
-    pushLog("상대: 콜 "+money(a));
-    G.turn = "me"; return;
+  if(st > need + 0.08 || r < 0.06){
+    a = put(i, c);
+    p.acted = true;
+    pushLog(p.name+": 콜 "+money(a));
+    return;
   }
-  pushLog("상대: 폴드");
-  doFold("ai");
+  p.folded = true; p.acted = true;
+  pushLog(p.name+": 폴드");
 }
 
 function myAct(kind){
-  if(G.phase !== "acting" || G.turn !== "me") return;
-  var c = toCall("me"), a;
-  if(kind === "fold"){ pushLog("나: 폴드"); doFold("me"); }
-  else if(kind === "check"){ G.acted.me = true; pushLog("나: 체크"); G.turn = "ai"; }
-  else if(kind === "call"){ a = put("me", c); G.acted.me = true; pushLog("나: 콜 "+money(a)); G.turn = "ai"; }
+  if(G.phase !== "acting" || !G.P[G.turn].me) return;
+  var me = G.P[0], c = toCall(0), a;
+  if(kind === "fold"){ me.folded = true; me.acted = true; pushLog("나: 폴드"); }
+  else if(kind === "check"){ me.acted = true; pushLog("나: 체크"); }
+  else if(kind === "call"){ a = put(0, c); me.acted = true; pushLog("나: 콜 "+money(a)); }
   else {
-    if(isAllIn("ai")){          /* 상대가 올인이면 콜 이상은 의미가 없다 */
-      a = put("me", Math.min(c, G.stack.me));
-      G.acted.me = true; pushLog("나: 콜 "+money(a)); G.turn = "ai"; step(); return;
-    }
-    a = (kind === "allin") ? put("me", G.stack.me) : put("me", raiseAmt("me"));
-    G.acted.me = true; G.acted.ai = false;
-    pushLog("나: "+(isAllIn("me") ? "올인" : (c > 0 ? "레이즈 " : "벳 "))+money(a));
-    G.turn = "ai";
+    a = (kind === "allin") ? put(0, me.stack) : put(0, raiseAmt(0));
+    G.P.forEach(function(q){ if(q.i !== 0) q.acted = false; });
+    me.acted = true;
+    pushLog("나: "+(me.stack === 0 ? "올인" : (c > 0 ? "레이즈" : "벳"))+" "+money(a));
   }
+  G.turn = nextSeat(G.turn);
   step();
 }
 
@@ -1237,7 +1315,7 @@ function courseView(){
     '</small></span></button></li>'+
     '<li class="node duel open"><button data-act="table">'+
     '<span class="node-no">♠</span><span class="node-txt"><strong>실전 대결</strong>'+
-    '<small>상대와 1대1로 진짜 한 판. 칩 1,000개로 시작합니다</small>'+
+    '<small>2~4명 중 골라서 진짜 한 판. 칩 1,000개로 시작합니다</small>'+
     '</span></button></li></ol>';
 
   h += '<button class="rulebtn" data-act="rules">📖 규칙 전체 보기</button>';
@@ -1247,80 +1325,106 @@ function courseView(){
   return h + '</div>';
 }
 
-function tableView(){
-  if(!G) newGame();
-  var over = (G.phase === "over"), gg = (G.phase === "gameover");
-  var myTurn = (G.phase === "acting" && G.turn === "me");
-  var c = myTurn ? toCall("me") : 0;
+function setupView(){
+  return '<div class="screen setup">'+
+    '<button class="x solo" data-act="home" aria-label="나가기">✕</button>'+
+    '<span class="eyebrow">실전 대결</span><h2>몇 명이서 할까요?</h2>'+
+    '<p class="rule">모두 칩 1,000개로 시작합니다. 블라인드는 10 / 20 고정.<br>'+
+    '사람이 많을수록 손이 세야 이깁니다.</p>'+
+    '<div class="seatpick">'+
+    '<button class="seatbtn" data-act="startgame" data-v="2"><b>2명</b>'+
+    '<small>1대1. 매 판 블라인드를 내니 접기만 하면 칩이 녹습니다</small></button>'+
+    '<button class="seatbtn" data-act="startgame" data-v="3"><b>3명</b>'+
+    '<small>내 뒤에 아직 두 명이 남아 있다는 감각이 생깁니다</small></button>'+
+    '<button class="seatbtn" data-act="startgame" data-v="4"><b>4명</b>'+
+    '<small>실제 테이블에 가장 가깝습니다. 훨씬 조심해야 합니다</small></button>'+
+    '</div></div>';
+}
 
-  var lit = function(who){
+function tableView(){
+  if(!G) return setupView();
+
+  if(G.phase === "gameover"){
+    var iWon = G.P[0].stack > 0;
+    return '<div class="screen result">'+
+      '<div class="result-mark">'+(iWon ? "★" : "●")+'</div>'+
+      '<h2>'+(iWon ? "칩을 전부 땄습니다" : "칩이 다 떨어졌습니다")+'</h2>'+
+      '<p class="big-score"><span>'+money(G.P[0].stack)+'</span></p>'+
+      '<p class="sub">'+G.handNo+'판을 쳤습니다</p>'+
+      '<div class="btn-row"><button class="btn ghost" data-act="home">코스로</button>'+
+      '<button class="btn" data-act="newsetup">다시 하기</button></div></div>';
+  }
+
+  var over = (G.phase === "over");
+  var myTurn = (G.phase === "acting" && G.P[G.turn].me);
+  var me = G.P[0], c = myTurn ? toCall(0) : 0;
+
+  var lit = function(p){
     return function(card){
-      if(!G.reveal || !G.best) return "";
-      return G.best[who].has(cid(card)) ? "key" : "fade";
+      if(!G.reveal || !p.best) return "";
+      return p.best.some(function(x){ return cid(x) === cid(card); }) ? "key" : "fade";
     };
   };
 
   var h = '<div class="screen felt">'+
     '<div class="hud"><button class="x" data-act="home" aria-label="나가기">✕</button>'+
     '<span class="hand-no">'+G.handNo+'번째 판 · '+STREET_NAMES[G.street]+'</span>'+
-    '<span class="btnmark">버튼 '+(G.button==="me"?"나":"상대")+'</span></div>';
+    '<span class="btnmark">버튼 '+G.P[G.button].name+'</span></div>';
 
-  /* 상대 */
-  h += '<div class="seat"><div class="seat-line"><strong>상대'+(G.button==="ai"?' <i class="dchip">D</i>':'')+'</strong>'+
-       '<span class="chips">'+money(G.stack.ai)+'</span></div>'+
-       '<div class="hand">'+
-       (G.reveal ? G.hole.ai.map(function(x){ return cardHTML(x,"md",lit("ai")(x)); }).join("")
-                 : backHTML("md")+backHTML("md"))+
-       '</div>'+
-       (G.bet.ai>0 ? '<span class="betchip">'+money(G.bet.ai)+'</span>' : '')+
-       '</div>';
-
-  /* 보드와 팟 */
-  h += '<div class="board"><span class="potlbl">팟 <b>'+money(potTotal())+'</b></span><div class="hand">';
-  for(var i=0;i<5;i++){
-    h += (i < G.board.length)
-      ? cardHTML(G.board[i], "md", (G.reveal && G.best && !G.best[G.win==="ai"?"ai":"me"].has(cid(G.board[i]))) ? "fade" : "")
-      : backHTML("md");
+  /* 상대들 */
+  for(var k=1;k<G.n;k++){
+    var p = G.P[k];
+    h += '<div class="seat mini'+(p.folded ? " out" : "")+
+      ((G.winners && G.winners[k]) ? " won" : "")+'">'+
+      '<div class="seat-line"><strong>'+p.name+(G.button===k ? ' <i class="dchip">D</i>' : '')+'</strong>'+
+      '<span class="chips">'+money(p.stack)+'</span></div>'+
+      '<div class="hand">'+
+      (p.folded ? '<span class="folded">폴드</span>'
+        : (G.reveal && p.best) ? p.hole.map(function(x){ return cardHTML(x,"sm",lit(p)(x)); }).join("")
+        : backHTML("sm")+backHTML("sm"))+
+      '</div>'+
+      (p.bet > 0 ? '<span class="betchip">'+money(p.bet)+'</span>' : '')+
+      '</div>';
   }
+
+  /* 보드 */
+  h += '<div class="board"><span class="potlbl">팟 <b>'+money(potTotal())+'</b></span><div class="hand">';
+  for(var i=0;i<5;i++) h += (i < G.board.length) ? cardHTML(G.board[i],"sm") : backHTML("sm");
   h += '</div></div>';
 
   /* 나 */
-  h += '<div class="seat"><div class="seat-line"><strong>나'+(G.button==="me"?' <i class="dchip">D</i>':'')+'</strong>'+
-       '<span class="chips">'+money(G.stack.me)+'</span></div>'+
-       '<div class="hand">'+G.hole.me.map(function(x){ return cardHTML(x,"md",lit("me")(x)); }).join("")+'</div>'+
-       (G.bet.me>0 ? '<span class="betchip">'+money(G.bet.me)+'</span>' : '')+
-       (G.board.length ? '<span class="myhand">지금 내 손 — '+nameOf(bestOfSeven(G.hole.me.concat(G.board)))+'</span>' : '')+
-       '</div>';
+  h += '<div class="seat'+(me.folded ? " out" : "")+((G.winners && G.winners[0]) ? " won" : "")+'">'+
+    '<div class="seat-line"><strong>나'+(G.button===0 ? ' <i class="dchip">D</i>' : '')+'</strong>'+
+    '<span class="chips">'+money(me.stack)+'</span></div>'+
+    '<div class="hand">'+
+    (me.hole.length ? me.hole.map(function(x){ return cardHTML(x,"md",lit(me)(x)); }).join("") : '')+
+    '</div>'+
+    (me.bet > 0 ? '<span class="betchip">'+money(me.bet)+'</span>' : '')+
+    ((G.board.length && me.hole.length && !me.folded)
+      ? '<span class="myhand">지금 내 손 — '+nameOf(bestOfSeven(me.hole.concat(G.board)))+'</span>' : '')+
+    '</div>';
 
-  /* 진행 기록 */
   h += '<div class="tlog">'+G.log.map(function(l){ return '<span>'+esc(l)+'</span>'; }).join("")+'</div>';
+  if(G.msg) h += '<div class="tmsg'+((G.winners && G.winners[0]) ? " good" : " bad")+'">'+esc(G.msg)+'</div>';
 
-  if(G.msg) h += '<div class="tmsg'+(G.win==="me"?" good":(G.win==="ai"?" bad":""))+'">'+esc(G.msg)+'</div>';
-
-  /* 행동 */
   h += '<div class="acts">';
-  if(gg){
-    h += '<div class="tmsg '+(G.stack.me>0?"good":"bad")+'">'+
-         (G.stack.me>0 ? "상대의 칩을 전부 땄습니다." : "칩이 다 떨어졌습니다.")+'</div>'+
-         '<button class="btn wide" data-act="restart">처음부터 다시</button>';
-  } else if(over){
+  if(over){
     h += '<button class="btn wide" data-act="nexthand">다음 판</button>';
   } else if(myTurn){
     if(c > 0) h += '<button class="act" data-act="tact" data-v="fold">폴드</button>';
     h += (c > 0)
-      ? '<button class="act" data-act="tact" data-v="call">콜 '+money(Math.min(c,G.stack.me))+'</button>'
+      ? '<button class="act" data-act="tact" data-v="call">콜 '+money(Math.min(c, me.stack))+'</button>'
       : '<button class="act" data-act="tact" data-v="check">체크</button>';
-    if(!isAllIn("ai")){
-      var ra = raiseAmt("me");
-      if(G.stack.me > c && ra < G.stack.me)
-        h += '<button class="act hot" data-act="tact" data-v="raise">'+(c>0?"레이즈 ":"벳 ")+money(ra)+'</button>';
-      h += '<button class="act hot" data-act="tact" data-v="allin">올인 '+money(G.stack.me)+'</button>';
+    if(actable().length > 1){
+      var ra = raiseAmt(0);
+      if(me.stack > c && ra < me.stack)
+        h += '<button class="act hot" data-act="tact" data-v="raise">'+(c>0 ? "레이즈 " : "벳 ")+money(ra)+'</button>';
+      h += '<button class="act hot" data-act="tact" data-v="allin">올인 '+money(me.stack)+'</button>';
     }
   } else {
-    h += '<span class="waiting">상대가 생각 중…</span>';
+    h += '<span class="waiting">'+(me.folded ? "폴드했습니다. 남은 사람들이 진행 중…" : "상대가 생각 중…")+'</span>';
   }
-  h += '</div></div>';
-  return h;
+  return h + '</div></div>';
 }
 
 function introView(){
@@ -1553,11 +1657,12 @@ document.addEventListener("click", function(e){
   else if(act==="reset"){
     if(confirm("완료 표시를 모두 지울까요?")){ S.finished=new Set(); store.set("cp_done",""); store.set("cp_cleared","0"); render(); }
   }
-  else if(act==="table"){ S.view="table"; if(!G) newGame(); render(); }
+  else if(act==="table"){ S.view="table"; render(); }
+  else if(act==="startgame"){ newGame(parseInt(t.getAttribute("data-v"),10)); render(); }
+  else if(act==="newsetup"){ G=null; render(); }
   else if(act==="home"){ S.view="course"; S.focus=null; render(); }
   else if(act==="tact"){ myAct(t.getAttribute("data-v")); render(); }
   else if(act==="nexthand"){ newHand(); render(); }
-  else if(act==="restart"){ newGame(); render(); }
   else if(act==="toggle"){
     var c = parseInt(t.getAttribute("data-c"),10);
     if(S.openCh.has(c)) S.openCh["delete"](c); else S.openCh.add(c);
