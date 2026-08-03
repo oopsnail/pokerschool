@@ -44,6 +44,7 @@ h1,h2,strong,.btn,.opt{font-family:var(--disp);font-weight:400}
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   font-family:var(--serif);line-height:1;box-shadow:0 4px 0 rgba(0,0,0,.28);flex:0 0 auto;}
 .card-lg{--w:94px}.card-md{--w:60px}.card-sm{--w:44px}
+@media (max-width:360px){ .card-sm{--w:40px} .card-md{--w:54px} }
 .card b{font-size:calc(var(--w)*.42);font-weight:700}
 .card i{font-size:calc(var(--w)*.32);font-style:normal;margin-top:2px}
 .card.red{color:var(--red)}.card.blk{color:var(--ink)}
@@ -75,6 +76,52 @@ h1,h2,strong,.btn,.opt{font-family:var(--disp);font-weight:400}
 .track{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px;margin-bottom:4px}
 .card.back{background:repeating-linear-gradient(45deg,#3A2359 0 5px,#2E1D46 5px 10px);
   border:1px solid var(--edge);box-shadow:none}
+
+/* ── 오답 설명 ── */
+.feedback p{white-space:pre-line}
+.fb-row{display:flex;gap:8px}
+.fb-row .btn{flex:1}
+.btn.sm{padding:12px 10px;font-size:14px}
+.rulebtn{display:block;width:100%;margin-top:20px;padding:13px;border-radius:12px;
+  border:1.5px solid var(--edge);color:var(--text);font-family:var(--disp);font-size:15px;
+  background:var(--bg-2);text-align:center}
+
+/* ── 규칙 시트 ── */
+.ovl{position:fixed;left:0;right:0;top:0;bottom:0;z-index:50;
+  height:100vh;height:100dvh;
+  background:rgba(12,7,20,.74);
+  display:flex;align-items:flex-end;justify-content:center;
+  -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+.sheet{width:100%;max-width:520px;max-height:100%;
+  overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  background:var(--bg);border:1px solid var(--edge);border-radius:20px 20px 0 0;
+  padding:0 18px calc(24px + env(safe-area-inset-bottom,0px))}
+.sheet-head{position:sticky;top:0;z-index:2;background:var(--bg);
+  padding-bottom:10px;border-bottom:1px solid var(--edge)}
+.sheet-top{display:flex;align-items:center;justify-content:space-between;padding:18px 0 12px}
+.rtabs{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;padding-bottom:2px}
+.rtabs::-webkit-scrollbar{display:none}
+.rtab{flex:0 0 auto;padding:7px 12px;border-radius:99px;font-size:13px;
+  border:1px solid var(--edge);background:var(--bg-2);color:var(--mute);white-space:nowrap}
+.rtab.on{background:var(--amber);border-color:var(--amber);color:#2A1B06;font-family:var(--disp)}
+.term{padding:15px 0;border-top:1px solid var(--edge)}
+.term:first-of-type{border-top:0}
+.term strong{display:block;font-family:var(--disp);font-size:16px;color:var(--amber);margin-bottom:5px}
+.term p{margin:0;font-size:13.5px;line-height:1.7;color:var(--text)}
+.sheet-top h2{font-size:20px;margin:0;color:#FFF}
+.sheet-lede{color:var(--mute);font-size:13.5px;margin:14px 0 4px}
+.rule-row{padding:16px 0;border-top:1px solid var(--edge)}
+.rule-head{display:flex;align-items:center;gap:9px;margin-bottom:11px}
+.rule-no{flex:0 0 24px;height:24px;border-radius:50%;display:grid;place-items:center;
+  background:var(--panel);color:var(--amber);font-family:var(--disp);font-size:13px}
+.rule-head strong{font-size:17px;color:#FFF}
+.rule-row .hand{justify-content:flex-start;flex-wrap:nowrap}
+.rule-what{font-size:13.5px;margin:11px 0 6px}
+.rule-tie{font-size:12.5px;color:var(--mute);margin:0;line-height:1.6}
+.rule-tie b{color:var(--amber);font-weight:400;font-family:var(--disp)}
+.sheet-foot{font-size:12.5px;color:var(--mute);margin:18px 0 16px;
+  padding-top:16px;border-top:1px solid var(--edge)}
 
 /* ── 실전 대결 테이블 ── */
 .node.duel .node-no{background:var(--go);color:#062A1D}
@@ -542,6 +589,60 @@ var RULEHINT = [
   "같은 숫자 네 장.",
   "같은 무늬로 숫자까지 연달아 다섯 장.",
   "같은 무늬로 10부터 A까지. 지지 않는 유일한 손입니다."
+];
+
+var RULETABS = ["손의 세기","행동","판의 진행","자리와 블라인드","자주 쓰는 말"];
+
+var GLOSSARY = [
+  null,   /* 0번은 족보표라 따로 그린다 */
+
+  /* 행동 */
+  [
+    { t:"체크", d:"앞에 걸린 돈이 없을 때, 칩을 내지 않고 차례만 넘기는 것. 앞사람이 이미 걸었다면 체크할 수 없습니다." },
+    { t:"벳", d:"그 라운드에서 처음으로 칩을 거는 것. 이미 누가 걸었다면 그건 벳이 아니라 레이즈입니다." },
+    { t:"콜", d:"앞사람이 건 만큼만 똑같이 맞춰 내고 다음 카드를 보는 것." },
+    { t:"레이즈", d:"앞사람이 건 것보다 더 크게 올리는 것. 올리면 뒷사람들은 처음부터 다시 정해야 합니다." },
+    { t:"리레이즈 (3벳)", d:"레이즈에 다시 레이즈로 맞받는 것. 보통 아주 센 손이거나 블러프입니다." },
+    { t:"폴드", d:"카드를 덮고 이 판을 포기하는 것. 이미 낸 칩은 못 돌려받지만 더 잃지도 않습니다." },
+    { t:"올인", d:"가진 칩을 남김없이 전부 거는 것. 더 낼 게 없으니 그대로 끝까지 갑니다." },
+    { t:"한 라운드가 끝나는 때", d:"남은 사람들이 낸 액수가 전부 같아지면 그 라운드가 끝나고 다음 카드가 열립니다." }
+  ],
+
+  /* 판의 진행 */
+  [
+    { t:"프리플랍", d:"공용 카드가 아직 없는 상태. 내 두 장만 보고 첫 베팅을 합니다." },
+    { t:"플랍", d:"공용 카드 세 장이 한꺼번에 열립니다. 손의 윤곽이 거의 여기서 정해집니다." },
+    { t:"턴", d:"네 번째 공용 카드. 보통 이때부터 베팅 단위가 커집니다." },
+    { t:"리버", d:"다섯 번째이자 마지막 공용 카드. 더 바뀔 건 없습니다." },
+    { t:"쇼다운", d:"리버까지 남은 사람들이 카드를 보여 승부를 가리는 것. 중간에 혼자만 남으면 쇼다운 없이 이깁니다." },
+    { t:"팟", d:"그 판에 쌓인 칩 전부. 이긴 사람이 통째로 가져갑니다." },
+    { t:"스트리트", d:"베팅 라운드 하나를 부르는 말. 홀덤은 프리플랍·플랍·턴·리버 네 개의 스트리트가 있습니다." }
+  ],
+
+  /* 자리와 블라인드 */
+  [
+    { t:"딜러 버튼", d:"카드를 돌리는 사람이 아니라 자리 표시입니다. 'D'라고 적힌 마커가 매 판 한 자리씩 옮겨갑니다. 플랍 이후 항상 마지막에 행동해서 가장 유리한 자리입니다." },
+    { t:"스몰 블라인드 (SB)", d:"버튼 왼쪽 첫 자리. 카드를 받기도 전에 강제로 적은 액수를 냅니다." },
+    { t:"빅 블라인드 (BB)", d:"스몰 다음 자리. 보통 스몰의 두 배를 냅니다. 그 판의 기준 액수가 됩니다." },
+    { t:"블라인드를 왜 내나", d:"아무도 걸지 않으면 판이 시작되지 않기 때문입니다. 강제로 씨앗을 깔아 두는 장치입니다." },
+    { t:"언더더건 (UTG)", d:"빅 블라인드 다음 자리. 프리플랍에서 가장 먼저 행동해 가장 불리합니다. 좋은 손만 들어가세요." },
+    { t:"컷오프 (CO)", d:"버튼 바로 앞자리. 버튼 다음으로 좋은 자리입니다." },
+    { t:"1대1(헤즈업)일 때", d:"규칙이 살짝 뒤집힙니다. 버튼이 스몰 블라인드를 내고, 프리플랍에서는 버튼이 먼저 행동합니다. 대신 플랍부터는 버튼이 마지막입니다." }
+  ],
+
+  /* 자주 쓰는 말 */
+  [
+    { t:"홀 카드 / 포켓", d:"나만 보는 두 장. 남에게 보여주지 않습니다." },
+    { t:"보드 / 커뮤니티 카드", d:"모두가 함께 쓰는 공용 다섯 장." },
+    { t:"키커", d:"족보를 이루고 남은 카드. 같은 족보끼리 붙었을 때 승부를 가릅니다." },
+    { t:"드로", d:"아직 완성되진 않았지만 한 장만 더 나오면 완성되는 상태." },
+    { t:"플러시 드로", d:"같은 무늬가 네 장인 상태. 한 장만 더 나오면 플러시가 됩니다." },
+    { t:"오픈엔드", d:"숫자가 네 개 연달아 있어 양쪽 어느 쪽이 나와도 스트레이트가 되는 상태." },
+    { t:"아웃츠", d:"나를 이기게 해줄 남은 카드의 장수. 플러시 드로라면 같은 무늬 9장이 아웃츠입니다." },
+    { t:"스택", d:"지금 내 앞에 있는 칩 전부." },
+    { t:"블러프", d:"나쁜 손으로 센 척 크게 걸어 상대를 접게 만드는 것." },
+    { t:"넛츠", d:"그 보드에서 나올 수 있는 가장 센 손. 질 수가 없는 손입니다." }
+  ]
 ];
 
 /* 규칙 화면용 예시 */
@@ -1068,6 +1169,7 @@ function loadDone(){
 var S = {
   finished: loadDone(),   /* 통과한 단계 목록 */
   openCh: new Set(),      /* 펼쳐 둔 장 */
+  ruleTab: 0,             /* 규칙 시트에서 보고 있는 갈래 */
   bestSpeed: parseInt(store.get("cp_speed")||"0",10) || 0,
   view: "course", i: 0, focus: null,
   q:null, idx:0, chosen:null, right:0, streak:0, best:0, left:60, done:false, speed:false
@@ -1328,19 +1430,33 @@ function showScore(){
 }
 
 function rulesHTML(){
+  var tab = S.ruleTab || 0;
   var h = '<div class="ovl" data-act="closerules"><div class="sheet" data-act="noop">'+
-    '<div class="sheet-top"><h2>손의 세기 순서</h2>'+
+    '<div class="sheet-head"><div class="sheet-top"><h2>규칙과 용어</h2>'+
     '<button class="x" data-act="closerules" aria-label="닫기">✕</button></div>'+
-    '<p class="sheet-lede">위로 갈수록 셉니다. 다섯 장으로 만드는 모양이고, 이보다 센 손은 없습니다.</p>';
-  RULEBOOK.forEach(function(r,i){
-    h += '<div class="rule-row"><div class="rule-head"><span class="rule-no">'+(9-i)+'</span>'+
-      '<strong>'+GRADE[r.g]+'</strong></div>'+
-      handHTML(r.cards,"sm")+
-      '<p class="rule-what">'+esc(RULEHINT[r.g])+'</p>'+
-      '<p class="rule-tie"><b>같은 모양끼리 붙으면</b> '+esc(r.tie)+'</p></div>';
+    '<div class="rtabs">';
+  RULETABS.forEach(function(name, i){
+    h += '<button class="rtab'+(i===tab?" on":"")+'" data-act="ruletab" data-v="'+i+'">'+name+'</button>';
   });
-  h += '<p class="sheet-foot">무늬(♠ ♥ ♦ ♣) 사이에는 위아래가 없습니다. 어느 무늬든 세기는 똑같습니다.</p>'+
-    '<button class="btn wide" data-act="closerules">닫기</button></div></div>';
+  h += '</div></div>';
+
+  if(tab === 0){
+    h += '<p class="sheet-lede">위로 갈수록 셉니다. 다섯 장으로 만드는 모양이고, 이보다 센 손은 없습니다.</p>';
+    RULEBOOK.forEach(function(r,i){
+      h += '<div class="rule-row"><div class="rule-head"><span class="rule-no">'+(9-i)+'</span>'+
+        '<strong>'+GRADE[r.g]+'</strong></div>'+
+        handHTML(r.cards,"sm")+
+        '<p class="rule-what">'+esc(RULEHINT[r.g])+'</p>'+
+        '<p class="rule-tie"><b>같은 모양끼리 붙으면</b> '+esc(r.tie)+'</p></div>';
+    });
+    h += '<p class="sheet-foot">무늬(♠ ♥ ♦ ♣) 사이에는 위아래가 없습니다. 어느 무늬든 세기는 똑같습니다.</p>';
+  } else {
+    GLOSSARY[tab].forEach(function(it){
+      h += '<div class="term"><strong>'+esc(it.t)+'</strong><p>'+esc(it.d)+'</p></div>';
+    });
+  }
+
+  h += '<button class="btn wide" data-act="closerules">닫기</button></div></div>';
   return h;
 }
 
@@ -1449,6 +1565,7 @@ document.addEventListener("click", function(e){
   }
   else if(act==="rules"){ openRules(); }
   else if(act==="closerules"){ closeRules(); }
+  else if(act==="ruletab"){ S.ruleTab = parseInt(t.getAttribute("data-v"),10); openRules(); }
   else if(act==="install" && deferred){
     deferred.prompt();
     deferred.userChoice.then(function(){ deferred=null; render(); });
