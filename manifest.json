@@ -1,7 +1,7 @@
 {
-  "name": "어느 쪽이 셀까? — 포커 첫걸음",
-  "short_name": "포커 첫걸음",
-  "description": "카드 한 장부터 시작하는 포커 입문 게임",
+  "name": "PokerDisco — 포커, 처음부터",
+  "short_name": "PokerDisco",
+  "description": "카드 한 장부터 실전 한 판까지, 포커를 처음부터 익히는 앱",
   "lang": "ko",
   "start_url": "./index.html",
   "scope": "./",
